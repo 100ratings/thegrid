@@ -1,0 +1,15 @@
+name = "thegrid-sync"
+main = "worker/index.js"
+compatibility_date = "2026-11-01"
+
+[durable_objects]
+bindings = [{ name = "SHOWS", class_name = "GridShow" }]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["GridShow"]
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = ["/ws/*", "/health"]
