@@ -42,8 +42,8 @@ A publicação gerenciada é preparada por `node scripts/build-hosted.mjs CAMINH
 2. Abra Ajustes e escolha uma das 20 imagens como force
 3. Toque em Mostrar animais, todos veem as categorias iniciais
 4. Peça uma categoria e que cada pessoa pense em um animal dessa categoria
-5. Selecione a categoria no painel antes de misturar
-6. Toque em Misturar animais
+5. Toque em qualquer ponto da linha da categoria escolhida, no painel do mágico
+6. Esse toque seleciona a categoria e mistura os animais automaticamente
 7. Peça qualquer quantidade positiva **par** de movimentos
 8. Avance para a primeira eliminação
 9. Em cada rodada seguinte, peça qualquer quantidade positiva **ímpar** de movimentos e avance
@@ -57,7 +57,7 @@ Um movimento vai para uma casa imediatamente vizinha na horizontal ou vertical, 
 - Dois toques em até 330 ms voltam uma etapa, sem transmitir um avanço intermediário
 - Os botões Voltar e Avançar executam o comando imediatamente
 - Voltar restaura a disposição anterior, avançar novamente preserva a mesma mistura
-- Para trocar a categoria após misturar, volte até a escolha inicial
+- A categoria é escolhida apenas pelo toque na linha da grade inicial, para trocá-la após misturar, volte até a escolha inicial
 - Para trocar o force, volte à espera
 - Reiniciar pelo menu exige confirmação e devolve todos à espera
 - A etapa só é considerada confirmada depois de salva pelo serviço

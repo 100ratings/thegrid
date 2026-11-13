@@ -1,17 +1,16 @@
-import {ANIMALS,CATEGORIES,STAGES,createLayout,frame,validateFrame} from './engine.js';
+import {ANIMALS,STAGES,createLayout,frame,validateFrame} from './engine.js';
 import {createRenderer,requestWakeLock} from './render.js';
 import {SyncClient,settingsFromURL,spectatorURL,normalizeRelay} from './sync.js';
 const $=s=>document.querySelector(s);const render=createRenderer($('#stage'));
-let options=settingsFromURL(),client,online=false,busy=false,stage=0,layout=[],category=2,force='girafa',timeline=[],commandTimer,lastTap=0,wake;
+let options=settingsFromURL(),client,online=false,busy=false,stage=0,layout=[],category=null,force='girafa',timeline=[],commandTimer,lastTap=0,wake;
 let confirmed=frame(0,[]),awaitingSnapshot=true,serverRevision=-1;
-try{const saved=JSON.parse(localStorage.getItem(`thegrid.prep.${options.room}`)||'null');if(saved){if(ANIMALS.some(a=>a.id===saved.force))force=saved.force;if(Number.isInteger(saved.category)&&saved.category>=0&&saved.category<4)category=saved.category;}}catch{}
+try{const saved=JSON.parse(localStorage.getItem(`thegrid.prep.${options.room}`)||'null');if(saved){if(ANIMALS.some(a=>a.id===saved.force))force=saved.force;}}catch{}
 for(const animal of ANIMALS){const opt=document.createElement('option');opt.value=animal.id;opt.textContent=animal.name;$('#force').append(opt);}
-CATEGORIES.forEach((name,index)=>{const opt=document.createElement('option');opt.value=index;opt.textContent=name;$('#category').append(opt);});
 function notice(text){$('#notice').textContent=text;}
-function cache(){localStorage.setItem(`thegrid.prep.${options.room}`,JSON.stringify({category,force}));}
+function cache(){localStorage.setItem(`thegrid.prep.${options.room}`,JSON.stringify({force}));}
 function draw(){
- render(confirmed);$('#preview-wait').hidden=stage!==0;$('#phase').textContent=STAGES[stage].name;$('#step-count').textContent=`${stage} / 7`;$('#hint').textContent=STAGES[stage].hint;$('#next-label').textContent=stage===7?'Force revelado':STAGES[stage].next;
- $('#advance').textContent=STAGES[stage].next;$('#advance').disabled=busy||!online||awaitingSnapshot||stage===7;$('#back').disabled=busy||!online||awaitingSnapshot||stage===0;$('#surface').disabled=busy||!online||awaitingSnapshot;
+ render(confirmed);$('#preview-wait').hidden=stage!==0;$('#phase').textContent=STAGES[stage].name;$('#step-count').textContent=`${stage} / 7`;$('#hint').textContent=STAGES[stage].hint;$('#next-label').textContent=stage===1?'Toque na categoria escolhida para misturar':stage===7?'Force revelado':STAGES[stage].next;
+ $('#advance').textContent=stage===1?'Toque em uma categoria':STAGES[stage].next;$('#advance').disabled=busy||!online||awaitingSnapshot||stage===7||stage===1;$('#back').disabled=busy||!online||awaitingSnapshot||stage===0;$('#surface').disabled=busy||!online||awaitingSnapshot;$('#surface').classList.toggle('choosing-category',stage===1);$('#surface').setAttribute('aria-label',stage===1?'Toque na linha da categoria escolhida para misturar, dois toques voltam':'Um toque avança, dois toques voltam');$('.gesture-note').textContent=stage===1?'Toque em qualquer ponto da linha da categoria · 2 toques voltam':'Na grade: 1 toque avança · 2 toques voltam';
 }
 function connect(){
  client?.close();online=false;awaitingSnapshot=true;serverRevision=-1;draw();
@@ -32,22 +31,25 @@ function connect(){
 async function publish(nextStage,nextLayout=layout){
  if(busy||!online||awaitingSnapshot)return;busy=true;clearTimeout(commandTimer);draw();
  const previous=confirmed;const next=frame(nextStage,nextLayout);
- try{await client.send(next);confirmed=next;stage=nextStage;layout=nextLayout;timeline=Array.from({length:stage+1},(_,i)=>frame(i,layout));notice('');}
+ try{await client.send(next);confirmed=next;stage=nextStage;layout=nextLayout;if(stage===0)category=null;timeline=Array.from({length:stage+1},(_,i)=>frame(i,layout));notice('');}
  catch(error){notice(error.message);if(!options.demo)awaitingSnapshot=true;if(serverRevision<0)confirmed=previous;}
  finally{busy=false;draw();}
 }
-function advance(){if(stage>=7||busy)return;if(stage===1&&layout.length!==20){layout=createLayout(category,force);}publish(stage+1);}
+function advance(){if(stage>=7||busy)return;if(stage===1){notice('Toque na linha da categoria escolhida para misturar');return;}publish(stage+1);}
+function chooseCategory(selected){if(stage!==1||busy||!online||awaitingSnapshot)return;if(category!==selected||layout.length!==20)layout=createLayout(selected,force);category=selected;publish(2,layout);}
+function categoryAtY(y){const cells=[...$('#stage').children];let selected=0,distance=Infinity;for(let row=0;row<4;row++){const rect=cells[row*5].getBoundingClientRect();const delta=Math.abs(y-(rect.top+rect.height/2));if(delta<distance){distance=delta;selected=row;}}return selected;}
 function back(){if(stage>0)publish(stage-1);}
 $('#advance').onclick=advance;$('#back').onclick=back;
-$('#surface').addEventListener('click',()=>{const now=performance.now();if(lastTap&&now-lastTap<330){clearTimeout(commandTimer);lastTap=0;back();}else{lastTap=now;commandTimer=setTimeout(()=>{lastTap=0;advance();},330);}});
+$('#surface').addEventListener('click',event=>{const now=performance.now();if(lastTap&&now-lastTap<330){clearTimeout(commandTimer);lastTap=0;back();}else{lastTap=now;const tapStage=stage;const selected=stage===1?categoryAtY(event.clientY):null;commandTimer=setTimeout(()=>{lastTap=0;if(stage!==tapStage)return;if(tapStage===1)chooseCategory(selected);else advance();},330);}});
+$('#surface').addEventListener('keydown',event=>{if(stage===1&&/^[1-4]$/.test(event.key)){event.preventDefault();chooseCategory(Number(event.key)-1);}});
 $('#surface').addEventListener('dblclick',e=>e.preventDefault());
-function openSettings(){clearTimeout(commandTimer);lastTap=0;$('#force').value=force;$('#category').value=String(category);$('#relay').value=options.relay;$('#room').value=options.room;$('#force').disabled=stage!==0;$('#category').disabled=stage>=2;$('#settings-notice').textContent='';$('#settings').showModal();}
+function openSettings(){clearTimeout(commandTimer);lastTap=0;$('#force').value=force;$('#relay').value=options.relay;$('#room').value=options.room;$('#force').disabled=stage!==0;$('#settings-notice').textContent='';$('#settings').showModal();}
 $('#settings-open').onclick=openSettings;
 $('#save').onclick=()=>{try{
  const relay=normalizeRelay($('#relay').value.trim());const room=$('#room').value.trim();if(!/^[a-zA-Z0-9_-]{1,64}$/.test(room))throw Error('A sala aceita letras, números, _ e hífen');
  const changed=relay!==options.relay||room!==options.room;
  if(changed&&stage!==0)throw Error('Volte à espera antes de mudar a conexão ou a sala');
- if(stage===0){const nextForce=$('#force').value;if(nextForce!==force)layout=[];force=nextForce;}if(stage<2){const nextCategory=Number($('#category').value);if(nextCategory!==category)layout=[];category=nextCategory;}
+ if(stage===0){const nextForce=$('#force').value;if(nextForce!==force)layout=[];force=nextForce;}
  options={...options,relay,room};localStorage.setItem('thegrid.relay',relay);localStorage.setItem('thegrid.room',room);cache();
  if(changed){confirmed=frame(0,[]);stage=0;layout=[];timeline=[];connect();}$('#settings').close();notice('Preparação salva');
  }catch(error){$('#settings-notice').textContent=error.message;}};
