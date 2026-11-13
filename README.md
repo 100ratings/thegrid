@@ -53,13 +53,17 @@ Um movimento vai para uma casa imediatamente vizinha na horizontal ou vertical, 
 
 ### Toques e retorno
 
+- Ao mostrar os animais, o mágico entra em um modo limpo com apenas a grade, sem dicas, ajustes ou controles visíveis
 - Um toque na grade avança após 330 ms
 - Dois toques em até 330 ms voltam uma etapa, sem transmitir um avanço intermediário
 - Os botões Voltar e Avançar executam o comando imediatamente
 - Voltar restaura a disposição anterior, avançar novamente preserva a mesma mistura
 - A categoria é escolhida apenas pelo toque na linha da grade inicial, para trocá-la após misturar, volte até a escolha inicial
 - Para trocar o force, volte à espera
-- Reiniciar pelo menu exige confirmação e devolve todos à espera
+- Depois da revelação, mais um toque abre os bastidores apenas no celular do mágico, o público continua vendo o force
+- Nos bastidores após a revelação, o botão grande Voltar à espera reinicia a apresentação diretamente, sem confirmação
+- Reiniciar pelo menu também devolve todos à espera diretamente
+- O painel tenta manter a tela ligada automaticamente durante a apresentação
 - A etapa só é considerada confirmada depois de salva pelo serviço
 
 ### Público

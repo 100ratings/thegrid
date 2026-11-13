@@ -2,15 +2,20 @@ import {ANIMALS,STAGES,createLayout,frame,validateFrame} from './engine.js';
 import {createRenderer,requestWakeLock} from './render.js';
 import {SyncClient,settingsFromURL,spectatorURL,normalizeRelay} from './sync.js';
 const $=s=>document.querySelector(s);const render=createRenderer($('#stage'));
-let options=settingsFromURL(),client,online=false,busy=false,stage=0,layout=[],category=null,force='girafa',timeline=[],commandTimer,lastTap=0,wake;
+let options=settingsFromURL(),client,online=false,busy=false,stage=0,layout=[],category=null,force='girafa',timeline=[],commandTimer,lastTap=0,wake,wakeWanted=false,backstageAfterFinal=false;
 let confirmed=frame(0,[]),awaitingSnapshot=true,serverRevision=-1;
 try{const saved=JSON.parse(localStorage.getItem(`thegrid.prep.${options.room}`)||'null');if(saved){if(ANIMALS.some(a=>a.id===saved.force))force=saved.force;}}catch{}
 for(const animal of ANIMALS){const opt=document.createElement('option');opt.value=animal.id;opt.textContent=animal.name;$('#force').append(opt);}
 function notice(text){$('#notice').textContent=text;}
 function cache(){localStorage.setItem(`thegrid.prep.${options.room}`,JSON.stringify({force}));}
 function draw(){
+ if(stage!==7)backstageAfterFinal=false;
+ const presenting=stage>0&&!backstageAfterFinal;
+ document.body.classList.toggle('presenting',presenting);
+ $('#quick-reset').hidden=stage!==7||presenting;
+ $('#quick-reset').disabled=busy||!online||awaitingSnapshot;
  render(confirmed);$('#preview-wait').hidden=stage!==0;$('#phase').textContent=STAGES[stage].name;$('#step-count').textContent=`${stage} / 7`;$('#hint').textContent=STAGES[stage].hint;$('#next-label').textContent=stage===1?'Toque na categoria escolhida para misturar':stage===7?'Force revelado':STAGES[stage].next;
- $('#advance').textContent=stage===1?'Toque em uma categoria':STAGES[stage].next;$('#advance').disabled=busy||!online||awaitingSnapshot||stage===7||stage===1;$('#back').disabled=busy||!online||awaitingSnapshot||stage===0;$('#surface').disabled=busy||!online||awaitingSnapshot;$('#surface').classList.toggle('choosing-category',stage===1);$('#surface').setAttribute('aria-label',stage===1?'Toque na linha da categoria escolhida para misturar, dois toques voltam':'Um toque avança, dois toques voltam');$('.gesture-note').textContent=stage===1?'Toque em qualquer ponto da linha da categoria · 2 toques voltam':'Na grade: 1 toque avança · 2 toques voltam';
+ $('#advance').textContent=stage===1?'Toque em uma categoria':STAGES[stage].next;$('#advance').disabled=busy||!online||awaitingSnapshot||stage===7||stage===1;$('#back').disabled=busy||!online||awaitingSnapshot||stage===0;$('#surface').disabled=busy||(stage!==7&&(!online||awaitingSnapshot));$('#surface').classList.toggle('choosing-category',stage===1);$('#surface').setAttribute('aria-label',stage===1?'Toque na linha da categoria escolhida para misturar, dois toques voltam':'Um toque avança, dois toques voltam');$('.gesture-note').textContent=stage===1?'Toque em qualquer ponto da linha da categoria · 2 toques voltam':'Na grade: 1 toque avança · 2 toques voltam';
 }
 function connect(){
  client?.close();online=false;awaitingSnapshot=true;serverRevision=-1;draw();
@@ -35,12 +40,12 @@ async function publish(nextStage,nextLayout=layout){
  catch(error){notice(error.message);if(!options.demo)awaitingSnapshot=true;if(serverRevision<0)confirmed=previous;}
  finally{busy=false;draw();}
 }
-function advance(){if(stage>=7||busy)return;if(stage===1){notice('Toque na linha da categoria escolhida para misturar');return;}publish(stage+1);}
+function advance(){if(busy)return;if(stage===7){backstageAfterFinal=true;draw();return;}if(stage===0)keepScreenAwake();if(stage===1){notice('Toque na linha da categoria escolhida para misturar');return;}publish(stage+1);}
 function chooseCategory(selected){if(stage!==1||busy||!online||awaitingSnapshot)return;if(category!==selected||layout.length!==20)layout=createLayout(selected,force);category=selected;publish(2,layout);}
 function categoryAtY(y){const cells=[...$('#stage').children];let selected=0,distance=Infinity;for(let row=0;row<4;row++){const rect=cells[row*5].getBoundingClientRect();const delta=Math.abs(y-(rect.top+rect.height/2));if(delta<distance){distance=delta;selected=row;}}return selected;}
 function back(){if(stage>0)publish(stage-1);}
 $('#advance').onclick=advance;$('#back').onclick=back;
-$('#surface').addEventListener('click',event=>{const now=performance.now();if(lastTap&&now-lastTap<330){clearTimeout(commandTimer);lastTap=0;back();}else{lastTap=now;const tapStage=stage;const selected=stage===1?categoryAtY(event.clientY):null;commandTimer=setTimeout(()=>{lastTap=0;if(stage!==tapStage)return;if(tapStage===1)chooseCategory(selected);else advance();},330);}});
+$('#surface').addEventListener('click',event=>{keepScreenAwake();const now=performance.now();if(lastTap&&now-lastTap<330){clearTimeout(commandTimer);lastTap=0;back();}else{lastTap=now;const tapStage=stage;const selected=stage===1?categoryAtY(event.clientY):null;commandTimer=setTimeout(()=>{lastTap=0;if(stage!==tapStage)return;if(tapStage===1)chooseCategory(selected);else advance();},330);}});
 $('#surface').addEventListener('keydown',event=>{if(stage===1&&/^[1-4]$/.test(event.key)){event.preventDefault();chooseCategory(Number(event.key)-1);}});
 $('#surface').addEventListener('dblclick',e=>e.preventDefault());
 function openSettings(){clearTimeout(commandTimer);lastTap=0;$('#force').value=force;$('#relay').value=options.relay;$('#room').value=options.room;$('#force').disabled=stage!==0;$('#settings-notice').textContent='';$('#settings').showModal();}
@@ -53,8 +58,10 @@ $('#save').onclick=()=>{try{
  options={...options,relay,room};localStorage.setItem('thegrid.relay',relay);localStorage.setItem('thegrid.room',room);cache();
  if(changed){confirmed=frame(0,[]);stage=0;layout=[];timeline=[];connect();}$('#settings').close();notice('Preparação salva');
  }catch(error){$('#settings-notice').textContent=error.message;}};
-$('#reset').onclick=()=>{if(busy)return;$('#settings').close();$('#reset-dialog').showModal();};$('#reset-cancel').onclick=()=>$('#reset-dialog').close();$('#reset-confirm').onclick=async()=>{await publish(0,[]);if(stage===0)$('#reset-dialog').close();};
+async function resetToWaiting(){if(busy)return;await publish(0,[]);if(stage===0&&$('#settings').open)$('#settings').close();}
+$('#reset').onclick=resetToWaiting;$('#quick-reset').onclick=resetToWaiting;
 $('#share').onclick=async()=>{if(!options.relay&&!options.demo){openSettings();$('#settings-notice').textContent='Configure o endereço de sincronização antes de compartilhar';return;}const url=spectatorURL(options);try{await navigator.clipboard.writeText(url);notice('Link do público copiado');}catch{notice(url);}};
-$('#wake').onclick=async()=>{wake=await requestWakeLock();$('#wake').textContent=wake?'Tela ativa':'Não disponível neste navegador';};
-document.addEventListener('visibilitychange',async()=>{if(document.visibilityState==='visible'&&wake)wake=await requestWakeLock();});
+async function keepScreenAwake(){wakeWanted=true;if(!wake||wake.released)wake=await requestWakeLock();$('#wake').textContent=wake?'Tela ativa':'Manter tela ligada';}
+$('#wake').onclick=keepScreenAwake;
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&wakeWanted)keepScreenAwake();});
 draw();connect();
