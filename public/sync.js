@@ -25,7 +25,7 @@ export class SyncClient{
  }
  url(){return new URL(`/api/show/${this.room}`,this.relay);}
  apply(packet){if(packet.type!=='state'||!Number.isSafeInteger(packet.revision)||packet.revision<this.revision)return;this.revision=packet.revision;this.onState(packet);}
- schedule(delay=1000){clearTimeout(this.timer);if(!this.stopped)this.timer=setTimeout(()=>this.poll(),delay+Math.random()*80);}
+ schedule(delay=500){clearTimeout(this.timer);if(!this.stopped)this.timer=setTimeout(()=>this.poll(),delay+Math.random()*30);}
  async poll(){
   if(this.stopped)return;if(this.inflight||this.publishing){this.schedule();return;}
   this.inflight=true;const generation=this.generation;const abort=this.abort=new AbortController();const timeout=setTimeout(()=>abort.abort(),7000);
@@ -35,7 +35,7 @@ export class SyncClient{
    const packet=response.status===204?null:await response.json();if(this.stopped||generation!==this.generation)return;
    if(packet)this.apply(packet);this.failures=0;this.onStatus('connected');
   }catch{if(!this.stopped&&generation===this.generation){this.failures++;this.onStatus(this.revision<0?'offline':'reconnecting');}}
-  finally{clearTimeout(timeout);this.inflight=false;this.schedule(this.failures?Math.min(5000,1000*this.failures):1000);}
+  finally{clearTimeout(timeout);this.inflight=false;this.schedule(this.failures?Math.min(5000,1000*this.failures):500);}
  }
  async send(value){
   if(this.demo){const revision=Date.now();this.channel.postMessage({type:'state',frame:value,revision});return {type:'ack',revision};}
@@ -43,7 +43,8 @@ export class SyncClient{
   this.publishing=true;this.generation++;this.abort?.abort();clearTimeout(this.timer);
   const packet={id:crypto.randomUUID(),frame:value,baseRevision:this.revision};const abort=new AbortController();const timeout=setTimeout(()=>abort.abort(),10000);
   try{
-   const response=await fetch(this.url(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(packet),cache:'no-store',signal:abort.signal});
+   // A safelisted content type avoids an extra CORS preflight round trip from GitHub Pages
+   const response=await fetch(this.url(),{method:'POST',headers:{'Content-Type':'text/plain;charset=UTF-8'},body:JSON.stringify(packet),cache:'no-store',signal:abort.signal});
    const result=await response.json();
    if(!response.ok){if(result.state)this.apply(result.state);throw Error(result.error||'O comando não foi confirmado');}
    this.apply(result);this.failures=0;this.onStatus('connected');return {type:'ack',revision:result.revision};

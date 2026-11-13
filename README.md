@@ -4,7 +4,7 @@ Duas páginas para uma experiência de animais sincronizada ao vivo
 
 - **Público:** `public/index.html`, apenas acompanha a apresentação
 - **Mágico:** `public/magico.html`, prepara o force e controla cada etapa
-- **Sincronização:** API HTTP persistente por sala, com consultas leves a cada segundo
+- **Sincronização:** API HTTP persistente por sala, com consultas leves a cada meio segundo
 
 ## Versão hospedada
 
@@ -13,7 +13,7 @@ As páginas e a sincronização ficam juntas na hospedagem gerenciada pelo ChatG
 - **Público:** https://thegrid-demian.humorousbroth.chatgpt.site/
 - **Mágico:** https://thegrid-demian.humorousbroth.chatgpt.site/magico.html
 
-A versão foi dimensionada e testada para um público de até 100 pessoas, o navegador consulta a etapa atual aproximadamente a cada segundo, o atraso real também depende da rede do evento
+A versão foi dimensionada e testada para um público de até 100 pessoas, o navegador consulta a etapa atual aproximadamente a cada meio segundo, o atraso real também depende da rede do evento
 
 O estado é salvo em armazenamento persistente da hospedagem, quem entra atrasado ou reconecta recebe a etapa atual, comandos usam revisão e gravação condicional para evitar sobrescrever uma etapa mais recente
 
@@ -54,8 +54,8 @@ Um movimento vai para uma casa imediatamente vizinha na horizontal ou vertical, 
 ### Toques e retorno
 
 - Ao mostrar os animais, o mágico entra em um modo limpo com apenas a grade, sem dicas, ajustes ou controles visíveis
-- Um toque na grade avança após 330 ms
-- Dois toques em até 330 ms voltam uma etapa, sem transmitir um avanço intermediário
+- Um toque na grade avança após 280 ms
+- Dois toques em até 280 ms voltam uma etapa, sem transmitir um avanço intermediário
 - Os botões Voltar e Avançar executam o comando imediatamente
 - Voltar restaura a disposição anterior, avançar novamente preserva a mesma mistura
 - A categoria é escolhida apenas pelo toque na linha da grade inicial, para trocá-la após misturar, volte até a escolha inicial
@@ -127,3 +127,9 @@ A prévia é local enquanto você ajusta, Salvar ajustes grava o visual da sala 
 Os desenhos crescem dentro dos cartões sem alterar suas dimensões, a ampliação máxima pode cortar extremidades e pode ser reduzida pela prévia, a escala padrão de 100% preserva o visual anterior
 
 O visual salvo acompanha os avanços, retornos e novas rodadas, a tela de espera aparece em qualquer orientação sem aviso para virar o aparelho
+
+## Resposta e cantos dos cartões
+
+A sincronização consulta o estado aproximadamente a cada 500 ms, além do tempo da rede, o envio do comando usa um tipo de conteúdo simples para evitar uma requisição CORS extra
+
+O toque único aguarda 280 ms para distinguir o duplo toque, as eliminações usam apenas uma transição curta de opacidade, sem encolher o cartão, a camada do desenho mantém um recorte arredondado explícito durante a ampliação e as transições

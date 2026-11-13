@@ -4,7 +4,7 @@ const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers}
 export async function handleAPI(request,env){
  const url=new URL(request.url);
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers});
- if(url.pathname==='/health')return json({ok:true,service:'thegrid',transport:'http',pollIntervalMs:1000});
+ if(url.pathname==='/health')return json({ok:true,service:'thegrid',transport:'http',pollIntervalMs:500});
  const match=url.pathname.match(/^\/api\/show\/([a-zA-Z0-9_-]{1,64})$/);if(!match)return json({error:'Endereço inválido'},404);
  if(!env.BUCKET)return json({error:'Sincronização indisponível'},503);
  const key=`thegrid/shows/${match[1]}.json`;
