@@ -3,7 +3,7 @@ import {createRenderer,requestWakeLock} from './render.js';
 import {SyncClient,settingsFromURL,spectatorURL,normalizeRelay} from './sync.js';
 const $=s=>document.querySelector(s);const render=createRenderer($('#stage'));
 let options=settingsFromURL(),client,online=false,busy=false,stage=0,layout=[],category=null,force='girafa',timeline=[],commandTimer,lastTap=0,wake,wakeWanted=false,backstageAfterFinal=false;
-let confirmed=frame(0,[]),awaitingSnapshot=true,serverRevision=-1;
+let confirmed=frame(0,[]),pendingFrame=null,awaitingSnapshot=true,serverRevision=-1;
 let appearance=normalizeAppearance(),draftAppearance=normalizeAppearance(),previewOrientation='portrait',pendingVisual=null;
 const settingsPreview=createRenderer($('#appearance-preview'));
 try{const saved=JSON.parse(localStorage.getItem(`thegrid.prep.${options.room}`)||'null');if(saved){if(ANIMALS.some(a=>a.id===saved.force))force=saved.force;if(saved.appearance)appearance=normalizeAppearance(saved.appearance);}}catch{}
@@ -16,7 +16,7 @@ function draw(){
  document.body.classList.toggle('presenting',presenting);
  $('#quick-reset').hidden=stage!==7||presenting;
  $('#quick-reset').disabled=busy||!online||awaitingSnapshot;
- render({...confirmed,appearance});$('#save').disabled=busy||!online||awaitingSnapshot;$('#preview-wait').hidden=stage!==0;$('#phase').textContent=STAGES[stage].name;$('#step-count').textContent=`${stage} / 7`;$('#hint').textContent=STAGES[stage].hint;$('#next-label').textContent=stage===1?'Toque na categoria escolhida para misturar':stage===7?'Force revelado':STAGES[stage].next;
+ render(pendingFrame??{...confirmed,appearance});$('#save').disabled=busy||!online||awaitingSnapshot;$('#preview-wait').hidden=stage!==0;$('#phase').textContent=STAGES[stage].name;$('#step-count').textContent=`${stage} / 7`;$('#hint').textContent=STAGES[stage].hint;$('#next-label').textContent=stage===1?'Toque na categoria escolhida para misturar':stage===7?'Force revelado':STAGES[stage].next;
  $('#advance').textContent=stage===1?'Toque em uma categoria':STAGES[stage].next;$('#advance').disabled=busy||!online||awaitingSnapshot||stage===7||stage===1;$('#back').disabled=busy||!online||awaitingSnapshot||stage===0;$('#surface').disabled=busy||(stage!==7&&(!online||awaitingSnapshot));$('#surface').classList.toggle('choosing-category',stage===1);$('#surface').setAttribute('aria-label',stage===1?'Toque na linha da categoria escolhida para misturar, dois toques voltam':'Um toque avança, dois toques voltam');$('.gesture-note').textContent=stage===1?'Toque em qualquer ponto da linha da categoria · 2 toques voltam':'Na grade: 1 toque avança · 2 toques voltam';
 }
 function connect(){
@@ -37,11 +37,12 @@ function connect(){
  if(options.demo){awaitingSnapshot=false;client.onRequest=()=>client.send(confirmed);draw();}
 }
 async function publish(nextStage,nextLayout=layout,nextAppearance=appearance){
- if(busy||!online||awaitingSnapshot)return;busy=true;clearTimeout(commandTimer);draw();
+ if(busy||!online||awaitingSnapshot)return;
  const previous=confirmed;const next=frame(nextStage,nextLayout,nextAppearance);
+ busy=true;clearTimeout(commandTimer);pendingFrame=stage>0&&nextStage>0?next:null;draw();
  try{await client.send(next);confirmed=next;appearance=normalizeAppearance(next.appearance);stage=nextStage;layout=nextLayout;if(stage===0)category=null;timeline=Array.from({length:stage+1},(_,i)=>frame(i,layout));notice('');return true;}
  catch(error){notice(error.message);if(!options.demo)awaitingSnapshot=true;if(serverRevision<0)confirmed=previous;return false;}
- finally{busy=false;draw();}
+ finally{pendingFrame=null;busy=false;draw();}
 }
 function advance(){if(busy)return;if(stage===7){backstageAfterFinal=true;draw();return;}if(stage===0)keepScreenAwake();if(stage===1){notice('Toque na linha da categoria escolhida para misturar');return;}publish(stage+1);}
 function chooseCategory(selected){if(stage!==1||busy||!online||awaitingSnapshot)return;if(category!==selected||layout.length!==20)layout=createLayout(selected,force);category=selected;publish(2,layout);}

@@ -133,3 +133,5 @@ O visual salvo acompanha os avanços, retornos e novas rodadas, a tela de espera
 A sincronização consulta o estado aproximadamente a cada 500 ms, além do tempo da rede, o envio do comando usa um tipo de conteúdo simples para evitar uma requisição CORS extra
 
 O toque único aguarda 280 ms para distinguir o duplo toque, as eliminações usam apenas uma transição curta de opacidade, sem encolher o cartão, a camada do desenho mantém um recorte arredondado explícito durante a ampliação e as transições
+
+Durante os movimentos, a grade do mágico mostra a etapa solicitada sem esperar a resposta da rede, o próximo comando permanece bloqueado até a confirmação, se o envio falhar, a grade retorna ao último estado confirmado
