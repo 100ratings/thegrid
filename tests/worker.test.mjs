@@ -31,3 +31,15 @@ test('invalid frames, oversized messages and unsupported methods are rejected',a
  assert.equal((await handleAPI(new Request(url,{method:'POST',body:'x'.repeat(7000)}),env)).status,413);
  assert.equal((await handleAPI(new Request(url,{method:'DELETE'}),env)).status,405);
 });
+test('saved portrait and landscape settings survive legacy commands, reset and late entry',async()=>{
+ const env={BUCKET:bucket()};const appearance={portrait:{image:120,font:110},landscape:{image:170,font:150}};
+ const save=new Request(url,{method:'POST',body:JSON.stringify({id:'visual',frame:{...frame(0,[]),appearance},baseRevision:0})});
+ assert.equal((await handleAPI(save,env)).status,200);
+ for(const [id,stage,revision] of [['legacy',1,1],['reset',0,2]]){const result=await(await handleAPI(req(id,stage,revision),env)).json();assert.equal(result.frame.stage,stage);assert.deepEqual(result.frame.appearance,appearance);}
+ const late=await(await handleAPI(new Request(url),env)).json();assert.deepEqual(late.frame.appearance,appearance);assert.equal(late.frame.stage,0);
+});
+test('appearance payloads with unbounded scales or missing orientation are rejected',async()=>{
+ const env={BUCKET:bucket()};for(const appearance of [{portrait:{image:900,font:100},landscape:{image:100,font:100}},{portrait:{image:100,font:100}}]){
+ const request=new Request(url,{method:'POST',body:JSON.stringify({id:'invalid-visual',frame:{...frame(0,[]),appearance},baseRevision:0})});assert.equal((await handleAPI(request,env)).status,400);
+ }
+});

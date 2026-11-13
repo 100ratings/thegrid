@@ -22,7 +22,8 @@ export async function handleAPI(request,env){
   // Idempotence: a retry after an uncertain response cannot advance twice
   if(current.commandId===packet.id)return json(current);
   if(packet.baseRevision!==current.revision)return json({error:'A apresentação mudou, confira a etapa e tente novamente',state:current},409);
-  const next={type:'state',frame:packet.frame,revision:current.revision+1,commandId:packet.id};
+  const publishedFrame={...packet.frame};if(!publishedFrame.appearance&&current.frame.appearance)publishedFrame.appearance=current.frame.appearance;
+  const next={type:'state',frame:publishedFrame,revision:current.revision+1,commandId:packet.id};
   const conditional=new Headers(object?{'If-Match':object.httpEtag}:{'If-None-Match':'*'});
   const saved=await env.BUCKET.put(key,JSON.stringify(next),{onlyIf:conditional,httpMetadata:{contentType:'application/json',cacheControl:'no-store'}});
   if(!saved)return json({error:'Outro comando chegou primeiro, reconectando'},409);

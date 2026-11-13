@@ -117,3 +117,13 @@ Esse modo usa BroadcastChannel, serve apenas para ensaiar na mesma máquina e n�
 - Testes de persistência, entrada tardia, 100 leituras simultâneas, repetição de comandos e conflito entre controladores
 
 Esses testes não substituem ensaio com os aparelhos e a rede do evento
+
+## Visual por orientação
+
+Nos ajustes do mágico, as abas Vertical e Horizontal têm controles independentes para o tamanho dos animais e a fonte das categorias, com prévia ao vivo e restauração do padrão de cada orientação
+
+A prévia é local enquanto você ajusta, Salvar ajustes grava o visual da sala no serviço compartilhado e aplica aos espectadores, inclusive quem entra depois ou reconecta
+
+Os desenhos crescem dentro dos cartões sem alterar suas dimensões, a ampliação máxima pode cortar extremidades e pode ser reduzida pela prévia, a escala padrão de 100% preserva o visual anterior
+
+O visual salvo acompanha os avanços, retornos e novas rodadas, a tela de espera aparece em qualquer orientação sem aviso para virar o aparelho

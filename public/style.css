@@ -10,3 +10,22 @@ body.controller.presenting{overflow:hidden;background:#000;padding:0;user-select
 .controller.presenting #stage{width:100%;height:100%;gap:clamp(5px,1.25vw,16px);padding-top:max(10px,env(safe-area-inset-top));padding-bottom:max(10px,env(safe-area-inset-bottom));padding-left:max(12px,env(safe-area-inset-left));padding-right:max(12px,env(safe-area-inset-right))}
 .controller.presenting #stage.initial{padding-top:26px;row-gap:23px}
 .controller.presenting .preview .animal{border-radius:clamp(6px,1.6vw,17px)}
+
+/* Scale the drawing inside a clipped layer, never the card or the category label */
+.stage{--animal-scale:var(--image-portrait,1);--category-scale:var(--font-portrait,1)}
+.animal-art{position:absolute;inset:0;border-radius:inherit;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.animal-art img{transform:scale(var(--animal-scale,1));transform-origin:center}
+.category-label{font-size:calc(10px * var(--category-scale,1));line-height:1.1}
+@media(orientation:landscape){.stage{--animal-scale:var(--image-landscape,1);--category-scale:var(--font-landscape,1)}}
+@media(max-height:480px) and (orientation:landscape){.category-label{font-size:calc(8px * var(--category-scale,1))}}
+.appearance-settings{border-top:1px solid var(--line);padding-top:18px;display:flex;flex-direction:column;gap:12px}
+.appearance-heading{display:flex;justify-content:space-between;align-items:center;gap:10px}.appearance-heading h2{font-size:16px}.appearance-heading .eyebrow{font-size:8px;white-space:nowrap}
+.orientation-tabs{display:flex;gap:6px;background:#090909;border-radius:10px;padding:4px}.orientation-tabs button{flex:1;padding:9px;border:0;border-radius:7px;background:transparent;font-size:12px;color:var(--muted)}.orientation-tabs button[aria-selected=true]{background:#2b261d;color:var(--gold)}
+.appearance-preview-wrap{display:flex;align-items:center;justify-content:center;background:#070707;border:1px solid var(--line);padding:8px;border-radius:12px;min-height:160px}
+.appearance-preview{aspect-ratio:9/16;width:min(100%,calc(30svh * 9 / 16));--preview-factor:.4;min-height:0;gap:calc(10px * var(--preview-factor));padding:calc(12px * var(--preview-factor))}
+.appearance-preview[data-preview-orientation=portrait]{--animal-scale:var(--image-portrait,1);--category-scale:var(--font-portrait,1)}
+.appearance-preview[data-preview-orientation=landscape]{--animal-scale:var(--image-landscape,1);--category-scale:var(--font-landscape,1);aspect-ratio:16/9;width:min(100%,calc(30svh * 16 / 9))}
+.appearance-preview.stage.initial{row-gap:calc(23px * var(--preview-factor));padding-top:calc(26px * var(--preview-factor))}.appearance-preview .animal{border-radius:calc(10px * var(--preview-factor))}.appearance-preview .category-label{font-size:calc(10px * var(--category-scale) * var(--preview-factor));top:calc(-18px * var(--preview-factor));letter-spacing:.13em}
+.appearance-settings label{position:relative;display:flex;flex-direction:row;justify-content:space-between;align-items:center}.appearance-settings output{color:var(--gold);font-variant-numeric:tabular-nums}
+.settings-form input[type=range]{padding:0;border:0;min-height:28px;height:28px;accent-color:var(--gold);background:transparent;cursor:pointer}
+.appearance-note{margin:0;line-height:1.5}.appearance-settings .text-button{align-self:flex-start;padding:5px 0;color:var(--gold)}

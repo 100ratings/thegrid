@@ -28,9 +28,18 @@ export function createLayout(category,force,rng=Math.random){
  for(const i of shuffled(ALL.filter(i=>layout[i]===null),rng))layout[i]=rest.pop();
  return layout;
 }
-export function frame(stage,layout){
+export const DEFAULT_APPEARANCE = Object.freeze({portrait:Object.freeze({image:100,font:100}),landscape:Object.freeze({image:100,font:100})});
+export function normalizeAppearance(value){
+ const result={};
+ for(const direction of ['portrait','landscape']){const v=value?.[direction];result[direction]={image:Number.isFinite(v?.image)?Math.min(240,Math.max(100,v.image)):100,font:Number.isFinite(v?.font)?Math.min(200,Math.max(80,v.font)):100};}
+ return result;
+}
+export function validateAppearance(value){
+ return !!value&&['portrait','landscape'].every(k=>value[k]&&Number.isFinite(value[k].image)&&value[k].image>=100&&value[k].image<=240&&Number.isFinite(value[k].font)&&value[k].font>=80&&value[k].font<=200);
+}
+export function frame(stage,layout,appearance){
  if(!Number.isInteger(stage)||stage<0||stage>7)throw Error('Etapa inválida');
- return {stage,layout:stage<2?ANIMALS.map(a=>a.id):[...layout],visible:[...MASKS[stage]]};
+ return {stage,layout:stage<2?ANIMALS.map(a=>a.id):[...layout],visible:[...MASKS[stage]],...(appearance===undefined?{}:{appearance:normalizeAppearance(appearance)})};
 }
 export const STAGES = [
  {name:'Em espera',next:'Mostrar animais',hint:'Prepare o force e compartilhe o link'},
@@ -43,6 +52,7 @@ export const STAGES = [
  {name:'Revelação',next:'Finalizado',hint:'O público chegou ao force'}
 ];
 export function validateFrame(value){
+ if(value?.appearance!==undefined&&!validateAppearance(value.appearance))return false;
  if(!value||!Number.isInteger(value.stage)||value.stage<0||value.stage>7)return false;
  if(!Array.isArray(value.layout)||value.layout.length!==20||new Set(value.layout).size!==20||value.layout.some(id=>!ANIMALS.some(a=>a.id===id)))return false;
  return Array.isArray(value.visible)&&JSON.stringify(value.visible)===JSON.stringify(MASKS[value.stage]);
