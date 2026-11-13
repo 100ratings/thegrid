@@ -4,35 +4,37 @@ Duas páginas para uma experiência de animais sincronizada ao vivo
 
 - **Público:** `public/index.html`, apenas acompanha a apresentação
 - **Mágico:** `public/magico.html`, prepara o force e controla cada etapa
-- **Sincronização:** Cloudflare Worker com um Durable Object por sala e WebSockets com hibernação
+- **Sincronização:** API HTTP persistente por sala, com consultas leves a cada segundo
 
-## Publicação completa
+## Versão hospedada
 
-O repositório já inclui as 20 imagens, as duas páginas e o serviço de sincronização
+As páginas e a sincronização ficam juntas na hospedagem gerenciada pelo ChatGPT, sem necessidade de configurar uma conta Cloudflare própria
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/100ratings/thegrid)
+- **Público:** https://thegrid-demian.humorousbroth.chatgpt.site/
+- **Mágico:** https://thegrid-demian.humorousbroth.chatgpt.site/magico.html
 
-Conecte este repositório à sua conta Cloudflare e use o comando de publicação `npx wrangler deploy`, o arquivo `wrangler.toml` inclui as páginas e o serviço na mesma publicação
+A versão foi dimensionada e testada para um público de até 100 pessoas, o navegador consulta a etapa atual aproximadamente a cada segundo, o atraso real também depende da rede do evento
 
-No endereço `https://thegrid-sync.SUA-CONTA.workers.dev`:
-
-- O público entra na raiz `/`
-- O mágico entra em `/magico.html`
-- O serviço usa `/ws/palco`
-- A configuração da conexão é automática em `workers.dev`
+O estado é salvo em armazenamento persistente da hospedagem, quem entra atrasado ou reconecta recebe a etapa atual, comandos usam revisão e gravação condicional para evitar sobrescrever uma etapa mais recente
 
 Não há senha no painel do mágico, conforme solicitado
 
-### GitHub Pages
+### GitHub Pages opcional
 
-A publicação das páginas também está preparada em `.github/workflows/pages.yml`
+A publicação das páginas em GitHub Pages continua preparada em `.github/workflows/pages.yml`
 
 1. Em Settings → Pages, selecione **GitHub Actions** como fonte
 2. Execute o workflow **Publish The Grid**
-3. No painel do mágico, abra Ajustes → Conexão e apresentação e informe o endereço publicado do Worker
+3. A sincronização já aponta para a versão hospedada, não é necessário preencher endereço de Worker
 4. Use **Copiar link do público**, o link inclui a sala e a conexão corretas
 
-GitHub Pages sozinho não sincroniza celulares, o Worker precisa estar publicado
+GitHub Pages sozinho não armazena o estado compartilhado, a hospedagem gerenciada faz essa parte
+
+### Hospedagem própria opcional
+
+O repositório inclui um Worker compatível com a mesma API HTTP em `worker/index.js`, se optar por hospedá-lo por conta própria, crie um bucket `thegrid-shows` e publique com `npm run deploy:relay`
+
+A publicação gerenciada é preparada por `node scripts/build-hosted.mjs CAMINHO-DO-PROJETO`, esse comando inclui os arquivos públicos no Worker autocontido
 
 ## Durante a apresentação
 
@@ -108,6 +110,6 @@ Esse modo usa BroadcastChannel, serve apenas para ensaiar na mesma máquina e n�
 - Prova por repetição dos conjuntos alcançáveis para qualquer contagem ímpar
 - Verificação de que não há posições isoladas durante os movimentos
 - Validação de mensagens e restauração de etapas
-- Testes de persistência, reconexão por reconstrução e envio simulado a 1.000 espectadores
+- Testes de persistência, entrada tardia, 100 leituras simultâneas, repetição de comandos e conflito entre controladores
 
 Esses testes não substituem ensaio com os aparelhos e a rede do evento

@@ -17,21 +17,38 @@ export function spectatorURL({relay,room,demo=false}){
  if(relay)u.searchParams.set('relay',relay);if(demo)u.searchParams.set('demo','1');return u.href;
 }
 export class SyncClient{
- constructor({relay,room,demo=false,role,onState,onStatus}){Object.assign(this,{relay,room,demo,role,onState,onStatus});this.pending=new Map();this.stopped=false;this.tries=0;this.lastReceived=0;
- if(demo){this.channel=new BroadcastChannel(`thegrid.demo.${room}`);this.channel.onmessage=e=>{if(e.data.type==='request'){this.onRequest?.();return;}this.onState(e.data);};this.onStatus('demo');if(role==='spectator')this.channel.postMessage({type:'request'});return;}
- if(!relay){this.onStatus('unconfigured');return;}this.connect();
+ constructor({relay,room,demo=false,role,onState,onStatus}){
+  Object.assign(this,{relay,room,demo,role,onState,onStatus});this.stopped=false;this.revision=-1;this.inflight=false;this.publishing=false;this.failures=0;this.generation=0;
+  if(demo){this.channel=new BroadcastChannel(`thegrid.demo.${room}`);this.channel.onmessage=e=>{if(e.data.type==='request'){this.onRequest?.();return;}this.onState(e.data);};this.onStatus('demo');if(role==='spectator')this.channel.postMessage({type:'request'});return;}
+  if(!relay){this.onStatus('unconfigured');return;}
+  this.onStatus('connecting');this.onVisibility=()=>{if(document.visibilityState==='visible'){clearTimeout(this.timer);this.poll();}};document.addEventListener('visibilitychange',this.onVisibility);this.poll();
  }
- connect(){if(this.stopped)return;this.onStatus('connecting');const url=new URL(`/ws/${this.room}`,this.relay);url.protocol=url.protocol==='https:'?'wss:':'ws:';url.searchParams.set('role',this.role);
- const ws=this.ws=new WebSocket(url);let opened=false;
- const timeout=setTimeout(()=>{if(ws.readyState!==WebSocket.OPEN)ws.close();},12000);
- ws.onopen=()=>{opened=true;clearTimeout(timeout);this.tries=0;this.lastReceived=Date.now();this.onStatus('connected');this.heartbeat=setInterval(()=>{if(Date.now()-this.lastReceived>65000){ws.close();return;}if(ws.readyState===WebSocket.OPEN)ws.send('ping');},25000);};
- ws.onmessage=e=>{this.lastReceived=Date.now();if(e.data==='pong')return;try{const packet=JSON.parse(e.data);if(packet.type==='ack'||packet.type==='error'){const pending=this.pending.get(packet.id);if(pending){clearTimeout(pending.timer);this.pending.delete(packet.id);packet.type==='ack'?pending.resolve(packet):pending.reject(Error(packet.message||'O comando não foi confirmado'));}return;}if(packet.type==='state')this.onState(packet);}catch{}};
- ws.onerror=()=>ws.close();ws.onclose=()=>{clearTimeout(timeout);clearInterval(this.heartbeat);for(const pending of this.pending.values()){clearTimeout(pending.timer);pending.reject(Error('Conexão interrompida, aguarde reconectar'));}this.pending.clear();if(this.stopped)return;this.onStatus(opened?'reconnecting':'offline');this.retry=setTimeout(()=>this.connect(),Math.min(12000,700*2**Math.min(this.tries++,4))+Math.random()*600);};
+ url(){return new URL(`/api/show/${this.room}`,this.relay);}
+ apply(packet){if(packet.type!=='state'||!Number.isSafeInteger(packet.revision)||packet.revision<this.revision)return;this.revision=packet.revision;this.onState(packet);}
+ schedule(delay=1000){clearTimeout(this.timer);if(!this.stopped)this.timer=setTimeout(()=>this.poll(),delay+Math.random()*80);}
+ async poll(){
+  if(this.stopped)return;if(this.inflight||this.publishing){this.schedule();return;}
+  this.inflight=true;const generation=this.generation;const abort=this.abort=new AbortController();const timeout=setTimeout(()=>abort.abort(),7000);
+  try{
+   const url=this.url();if(this.revision>=0)url.searchParams.set('since',String(this.revision));
+   const response=await fetch(url,{cache:'no-store',signal:abort.signal});if(!response.ok)throw Error('Conexão indisponível');
+   const packet=response.status===204?null:await response.json();if(this.stopped||generation!==this.generation)return;
+   if(packet)this.apply(packet);this.failures=0;this.onStatus('connected');
+  }catch{if(!this.stopped&&generation===this.generation){this.failures++;this.onStatus(this.revision<0?'offline':'reconnecting');}}
+  finally{clearTimeout(timeout);this.inflight=false;this.schedule(this.failures?Math.min(5000,1000*this.failures):1000);}
  }
- send(frame){
- if(this.demo){this.channel.postMessage({type:'state',frame,revision:Date.now()});return Promise.resolve({type:'ack',revision:Date.now()});}
- if(this.ws?.readyState!==WebSocket.OPEN)return Promise.reject(Error('Aguarde a conexão antes de avançar'));
- const id=crypto.randomUUID();return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{this.pending.delete(id);reject(Error('Sem confirmação, confira a conexão antes de continuar'));},10000);this.pending.set(id,{resolve,reject,timer});this.ws.send(JSON.stringify({type:'publish',id,frame}));});
+ async send(value){
+  if(this.demo){const revision=Date.now();this.channel.postMessage({type:'state',frame:value,revision});return {type:'ack',revision};}
+  if(this.stopped||this.revision<0)throw Error('Aguarde a conexão antes de avançar');
+  this.publishing=true;this.generation++;this.abort?.abort();clearTimeout(this.timer);
+  const packet={id:crypto.randomUUID(),frame:value,baseRevision:this.revision};const abort=new AbortController();const timeout=setTimeout(()=>abort.abort(),10000);
+  try{
+   const response=await fetch(this.url(),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(packet),cache:'no-store',signal:abort.signal});
+   const result=await response.json();
+   if(!response.ok){if(result.state)this.apply(result.state);throw Error(result.error||'O comando não foi confirmado');}
+   this.apply(result);this.failures=0;this.onStatus('connected');return {type:'ack',revision:result.revision};
+  }catch(error){this.revision=-1;this.onStatus('reconnecting');throw Error(error.name==='AbortError'?'Sem confirmação, aguarde a reconexão antes de continuar':error.message);}
+  finally{clearTimeout(timeout);this.publishing=false;this.schedule(50);}
  }
- close(){this.stopped=true;clearTimeout(this.retry);clearInterval(this.heartbeat);this.ws?.close();this.channel?.close();for(const p of this.pending.values()){clearTimeout(p.timer);p.reject(Error('Conexão encerrada'));}this.pending.clear();}
+ close(){this.stopped=true;clearTimeout(this.timer);this.abort?.abort();this.channel?.close();if(this.onVisibility)document.removeEventListener('visibilitychange',this.onVisibility);}
 }

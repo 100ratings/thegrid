@@ -1,30 +1,33 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
-import {frame,createLayout,validateFrame} from '../public/engine.js';
-const source=(await readFile(new URL('../worker/index.js',import.meta.url),'utf8')).replace("import { DurableObject } from 'cloudflare:workers';",'').replace("import {frame,validateFrame} from '../public/engine.js';",'').replace('export default {','const handler = {').replace('export class GridShow','class GridShow');
-class FakeDO{constructor(ctx,env){this.ctx=ctx;this.env=env;}}
-const GridShow=new Function('DurableObject','frame','validateFrame','WebSocketRequestResponsePair',source+'; return GridShow;')(FakeDO,frame,validateFrame,class{});
-function socket(role='spectator'){let attachment={role,lastPublish:0};return {messages:[],send(s){this.messages.push(JSON.parse(s));},serializeAttachment(v){attachment=v;},deserializeAttachment(){return attachment;},close(){}};}
-async function harness(saved){const sockets=[];let stored=saved;const ctx={storage:{async get(){return stored;},async put(k,v){stored=structuredClone(v);}},getWebSockets(){return sockets;},setWebSocketAutoResponse(){},blockConcurrencyWhile(fn){this.ready=fn();}};const show=new GridShow(ctx,{});await ctx.ready;return {show,ctx,sockets,stored:()=>stored};}
-const layout=createLayout(2,'girafa',()=>.41);
-test('one command fans out the same committed frame to 1000 spectators and confirms only after storage',async()=>{
- const h=await harness();const controller=socket('controller');h.sockets.push(controller,...Array.from({length:1000},()=>socket()));
- await h.show.webSocketMessage(controller,JSON.stringify({type:'publish',id:'a',frame:frame(2,layout)}));
- assert.equal(h.stored().revision,1);for(const ws of h.sockets)assert.deepEqual(ws.messages[0],h.stored());assert.equal(controller.messages.at(-1).type,'ack');
+import {handleAPI} from '../worker/http.js';
+import {createLayout,frame} from '../public/engine.js';
+function bucket(){const data=new Map();let seq=0;return {async get(key){const o=data.get(key);return o?{...o,json:async()=>JSON.parse(o.body)}:null;},async put(key,body,options){const existing=data.get(key);const h=options.onlyIf;if(h.get('If-Match')&&h.get('If-Match')!==existing?.httpEtag)return null;if(h.get('If-None-Match')==='*'&&existing)return null;const next={body,httpEtag:`"${++seq}"`};data.set(key,next);return next;}};}
+const url='https://test.local/api/show/qa';const layout=createLayout(0,'zebra',()=>.42);
+const req=(id,stage,baseRevision)=>new Request(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,frame:frame(stage,layout),baseRevision})});
+test('new rooms begin in waiting and 100 simultaneous reads get the same saved frame',async()=>{
+ const env={BUCKET:bucket()};const initial=await (await handleAPI(new Request(url),env)).json();assert.equal(initial.frame.stage,0);
+ const published=await (await handleAPI(req('first',2,0),env)).json();assert.equal(published.revision,1);
+ const results=await Promise.all(Array.from({length:100},async()=>await(await handleAPI(new Request(url),env)).json()));for(const result of results)assert.deepEqual(result,published);
 });
-test('state survives a reconstructed instance and includes the current frame for late arrivals',async()=>{
- const h=await harness({type:'state',frame:frame(5,layout),revision:18});assert.deepEqual(h.show.snapshot.frame,frame(5,layout));assert.equal(h.show.snapshot.revision,18);
+test('unchanged polls return an empty 204, changed polls and late arrivals get the current frame',async()=>{
+ const env={BUCKET:bucket()};await handleAPI(req('one',4,0),env);
+ assert.equal((await handleAPI(new Request(url+'?since=1'),env)).status,204);
+ const changed=await(await handleAPI(new Request(url+'?since=0'),env)).json();assert.deepEqual(changed.frame,frame(4,layout));
 });
-test('spectator messages and malformed frames cannot publish state',async()=>{
- const h=await harness();await h.show.webSocketMessage(socket(),JSON.stringify({type:'publish',id:'a',frame:frame(7,layout)}));assert.equal(h.show.snapshot.revision,0);
- const ws=socket('controller');await h.show.webSocketMessage(ws,JSON.stringify({type:'publish',id:'b',frame:{stage:7,layout:[],visible:[7]}}));assert.equal(ws.messages[0].type,'error');assert.equal(h.show.snapshot.revision,0);
+test('retries are idempotent, stale commands cannot overwrite newer state, and undo increments the revision',async()=>{
+ const env={BUCKET:bucket()};await handleAPI(req('one',5,0),env);const retry=await(await handleAPI(req('one',5,0),env)).json();assert.equal(retry.revision,1);
+ assert.equal((await handleAPI(req('stale',7,0),env)).status,409);
+ const undo=await(await handleAPI(req('undo',4,1),env)).json();assert.equal(undo.revision,2);assert.deepEqual(undo.frame,frame(4,layout));
 });
-test('failed persistence neither broadcasts nor acknowledges success',async()=>{
- const h=await harness();h.ctx.storage.put=async()=>{throw Error('disk');};const ws=socket('controller');const spectator=socket();h.sockets.push(ws,spectator);
- await h.show.webSocketMessage(ws,JSON.stringify({type:'publish',id:'failed',frame:frame(2,layout)}));assert.equal(h.show.snapshot.revision,0);assert.equal(spectator.messages.length,0);assert.equal(ws.messages[0].type,'error');assert.equal(ws.messages[0].id,'failed');
+test('concurrent controllers cannot both publish against the same base revision',async()=>{
+ const env={BUCKET:bucket()};const results=await Promise.all([handleAPI(req('a',2,0),env),handleAPI(req('b',3,0),env)]);assert.deepEqual(results.map(r=>r.status).sort(),[200,409]);
 });
-test('undo publishes the exact old arrangement with an increasing revision',async()=>{
- const h=await harness();const ws=socket('controller');h.sockets.push(ws);
- for(const [id,stage] of [[1,5],[2,4],[3,5]]){ws.serializeAttachment({role:'controller',lastPublish:0});await h.show.webSocketMessage(ws,JSON.stringify({type:'publish',id:String(id),frame:frame(stage,layout)}));assert.deepEqual(h.show.snapshot.frame,frame(stage,layout));assert.equal(h.show.snapshot.revision,id);}
+test('failed persistence never acknowledges success or advances the stored show',async()=>{
+ const b=bucket();b.put=async()=>{throw Error('offline');};const env={BUCKET:b};assert.equal((await handleAPI(req('a',2,0),env)).status,503);assert.equal((await(await handleAPI(new Request(url),env)).json()).revision,0);
+});
+test('invalid frames, oversized messages and unsupported methods are rejected',async()=>{
+ const env={BUCKET:bucket()};const bad=new Request(url,{method:'POST',body:JSON.stringify({id:'x',frame:{stage:8},baseRevision:0})});assert.equal((await handleAPI(bad,env)).status,400);
+ assert.equal((await handleAPI(new Request(url,{method:'POST',body:'x'.repeat(7000)}),env)).status,413);
+ assert.equal((await handleAPI(new Request(url,{method:'DELETE'}),env)).status,405);
 });

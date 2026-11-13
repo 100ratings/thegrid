@@ -16,7 +16,7 @@ function draw(){
 function connect(){
  client?.close();online=false;awaitingSnapshot=true;serverRevision=-1;draw();
  client=new SyncClient({...options,role:'controller',onStatus:status=>{
- online=status==='connected'||status==='demo';if(status==='connected')awaitingSnapshot=true;
+ online=status==='connected'||status==='demo';
  const labels={connected:'Conectado',demo:'Teste local',connecting:'Conectando',reconnecting:'Reconectando',offline:'Sem conexão',unconfigured:'Configurar sincronização'};
  $('#status').textContent=labels[status]||status;$('#status').className=`status ${online?'online':'error'}`;
  if(status==='unconfigured')notice('Configure a sincronização em Ajustes para controlar o público');draw();
@@ -33,7 +33,7 @@ async function publish(nextStage,nextLayout=layout){
  if(busy||!online||awaitingSnapshot)return;busy=true;clearTimeout(commandTimer);draw();
  const previous=confirmed;const next=frame(nextStage,nextLayout);
  try{await client.send(next);confirmed=next;stage=nextStage;layout=nextLayout;timeline=Array.from({length:stage+1},(_,i)=>frame(i,layout));notice('');}
- catch(error){notice(error.message);if(serverRevision<0)confirmed=previous;}
+ catch(error){notice(error.message);if(!options.demo)awaitingSnapshot=true;if(serverRevision<0)confirmed=previous;}
  finally{busy=false;draw();}
 }
 function advance(){if(stage>=7||busy)return;if(stage===1&&layout.length!==20){layout=createLayout(category,force);}publish(stage+1);}
